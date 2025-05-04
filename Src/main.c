@@ -33,12 +33,15 @@
 #define CS_Port			GPIOA
 #define CS_Pin			4
 #define CS_BSRR			(CS_Port + 0x18)
+#define GPIOC			0x40020800
+#define GPIOC_MODER		(GPIOC + 0x00)
 
 static void SetSystemClockto16MHz(void);
 static void ConfigureTimer3(void);
 static void Delay(uint32_t ms);
 static void SPI1ClockEnable(void);
 static void GPIOAClockEnable(void);
+static void GPIOCClockEnable(void);
 static void SPI1Init(void);
 static void SPI1WriteToDR(uint16_t data);
 static void WaitForTransmissionEnd(void);
@@ -61,6 +64,21 @@ int main(void)
 	ConfigureTimer3();
 	SPI1ClockEnable();
 	GPIOAClockEnable();
+
+	// Now, set up button GPIOC clock and pins
+	GPIOCClockEnable();
+	uint32_t *GPIOC_MODER_Ptr = (uint32_t*)GPIOC_MODER;
+	// Up Pin PC0
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (0 * 2));
+	// Right Pin PC1
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (1 * 2));
+	// Down Pin PC2
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (2 * 2));
+	// Left Pin PC3
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (3 * 2));
+
+	// Now set up falling edge interrupt for buttons
+
 
 	SPI1PinsInit();
 	SPI1Init();
@@ -195,6 +213,13 @@ void GPIOAClockEnable(void)
 	// Now, Enable GPIOA Clock through AHB1 Bus
 	uint32_t *RCC_AHB1ENR_Ptr = (uint32_t*)RCC_AHB1ENR;
 	*RCC_AHB1ENR_Ptr |= (uint32_t)0x1;
+}
+
+void GPIOCClockEnable(void)
+{
+	// Now, Enable GPIOC Clock through AHB1 Bus
+	uint32_t *RCC_AHB1ENR_Ptr = (uint32_t*)RCC_AHB1ENR;
+	*RCC_AHB1ENR_Ptr |= (uint32_t)0b1 << 2;
 }
 
 void SPI1Init(void)
