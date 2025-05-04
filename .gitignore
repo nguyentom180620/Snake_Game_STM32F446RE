@@ -1,0 +1,28 @@
+# STM32CubeIDE generated files
+/.settings/
+/Debug/
+/Release/
+/*.launch
+/.project
+/.cproject
+/.mxproject
+
+# Build output
+*.bin
+*.elf
+*.hex
+*.map
+*.o
+*.a
+
+# Backup files
+*~
+*.bak
+*.swp
+
+# IDE-specific files
+.vscode/
+.idea/
+
+# CubeMX configuration
+*.ioc
