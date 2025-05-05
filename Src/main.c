@@ -6,6 +6,7 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define RCC 			0x40023800
 #define RCC_CR			(RCC + 0x00)
@@ -41,6 +42,10 @@
 #define EXTI_IMR		(EXTI + 0x00)
 #define EXTI_FTSR		(EXTI + 0x0C)
 #define EXTI_PR			(EXTI + 0x14)
+#define EXTI0IRQn		6
+#define EXTI1IRQn		7
+#define EXTI2IRQn		8
+#define EXTI3IRQn		9
 #define NVIC_ISER		0xE000E100
 #define UP				0
 #define RIGHT			1
@@ -74,14 +79,29 @@ void EXTI0_IRQHandler(void);
 void EXTI1_IRQHandler(void);
 void EXTI2_IRQHandler(void);
 void EXTI3_IRQHandler(void);
+void playLoseScreen(void);
 
 static volatile int snake_direction = RIGHT;
+static volatile bool alive = true;
 
 typedef struct {
 	volatile uint32_t ISER[3];
 } NVIC_Type;
 
 #define NVIC ((NVIC_Type*)NVIC_ISER)
+
+typedef struct {
+	volatile int snakeSize;
+	uint8_t x_pos[64];
+	uint8_t y_pos[64];
+	uint8_t outputArray[9];
+} snake_Type;
+
+static void DisplaySnake(snake_Type snake);
+static void SnakeInit(snake_Type *snake);
+static void MoveSnake(snake_Type *snake);
+static void SnakeDead(void);
+static void SnakeCheckAfterMove(snake_Type *snake);
 
 int main(void)
 {
@@ -94,42 +114,46 @@ int main(void)
 	GPIOCClockEnable();
 	MovementButtonsInit();
 
+	// Enable Interrupts
+	NVIC_EnableIRQ(EXTI0IRQn);
+	NVIC_EnableIRQ(EXTI1IRQn);
+	NVIC_EnableIRQ(EXTI2IRQn);
+	NVIC_EnableIRQ(EXTI3IRQn);
+
 	SPI1PinsInit();
 	SPI1Init();
 
 	matrixInit();
 
 	// Write data here
-	// Here is a drawing of a heart
-	int numberOfCords = 16;
-	uint8_t x_pos[] =
-	{
-	1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8
-	};
-	uint8_t y_pos[] =
-	{
-	5, 6, 4, 7, 3, 7, 2, 6, 2, 6, 3, 7, 4, 7, 5, 6
-	};
-	uint8_t outputArray[9] = {0}; // Make sure outputArray initialize to zeroes
+	// Snake Starts with head at (3, 2), tail at (2, 2), and size 2
+	snake_Type snake;
+	snake_Type *snake_Ptr = &snake;
+	SnakeInit(snake_Ptr);
 
-	positionToMatrixPos(x_pos, y_pos, numberOfCords, outputArray); // Makes it easy for user
-
-	while(1)	// Now, let's do a small show! This is the row, bottom to top version
+	while(1)
 	{
-		for (volatile int i = 1; i <= 8; i++)
+		// If dead, play the dead sequence and queue for restart
+		if (alive == false)
 		{
-			for (volatile int j = 1; j <= i; j++)
-			{
-				LEDMatrixRowWrite(outputArray, j);
-			}
-			Delay(500); // Half a second
+			playLoseScreen();
 		}
-		matrixClear();
-		Delay(500);
-		LEDMatrixWrite(outputArray);
-		Delay(500);
-		matrixClear();
+
+		// First, display to screen
+		DisplaySnake(snake);
+
+		// Next, delay by set amount (default 1 second)
 		Delay(1000);
+
+		// Here, we would check if apple was collected.
+		// If it was, add one to size and reset apple collected
+
+		// Then, move the snake by one
+		MoveSnake(snake_Ptr);
+
+		// Finally, check if head is currently at an apple (then set that bool)
+		// and lastly check if we are alive (Are we out of bounds or have we hit ourself)
+		SnakeCheckAfterMove(snake_Ptr);
 	}
 }
 
@@ -490,8 +514,170 @@ void EXTI0_IRQHandler(void)
 {
 	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
 
-
+	snake_direction = UP;
 
 	// Clear PinC0 interrupt Bit
 	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
+}
+
+void EXTI1_IRQHandler(void)
+{
+	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
+
+	snake_direction = RIGHT;
+
+	// Clear PinC1 interrupt Bit
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
+}
+
+void EXTI2_IRQHandler(void)
+{
+	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
+
+	snake_direction = DOWN;
+
+	// Clear PinC2 interrupt Bit
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
+}
+
+void EXTI3_IRQHandler(void)
+{
+	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
+
+	snake_direction = LEFT;
+
+	// Clear PinC3 interrupt Bit
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
+}
+
+void DisplaySnake(snake_Type snake)
+{
+	positionToMatrixPos(snake.x_pos, snake.y_pos, snake.snakeSize, snake.outputArray);
+	LEDMatrixWrite(snake.outputArray);
+}
+
+void SnakeInit(snake_Type *snake)
+{
+	snake->snakeSize = 2;
+	for (int i = 0; i < 64; i++)
+	{
+		snake->x_pos[i] = 0;
+		snake->y_pos[i] = 0;
+	}
+	snake->x_pos[0] = 3;
+	snake->x_pos[1] = 2;
+	snake->y_pos[0] = 2;
+	snake->y_pos[1] = 2;
+	for (int i = 0; i < 9; i++)
+	{
+		snake->outputArray[i] = 0;
+	}
+}
+
+void MoveSnake(snake_Type *snake)
+{
+	uint8_t tempToPlacex = snake->x_pos[0];
+	uint8_t tempToPlacey = snake->y_pos[0];
+	uint8_t tempToStorex = 0;
+	uint8_t tempToStorey = 0;
+	switch(snake_direction)
+	{
+		case UP:
+			tempToPlacey += 1;
+			break;
+		case RIGHT:
+			tempToPlacex += 1;
+			break;
+		case DOWN:
+			tempToPlacey -= 1;
+			break;
+		case LEFT:
+			tempToPlacex -= 1;
+	}
+	for (int i = 0; i < snake->snakeSize; i++)
+	{
+		tempToStorex = snake->x_pos[i];
+		tempToStorey = snake->y_pos[i];
+		snake->x_pos[i] = tempToPlacex;
+		snake->y_pos[i] = tempToPlacey;
+		tempToPlacex = tempToStorex;
+		tempToPlacey = tempToStorey;
+	}
+}
+
+void playLoseScreen(void)
+{
+	// Double X
+	int doubleXSize = 16;
+	uint8_t doubleX_x_pos[] = {1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8};
+	uint8_t doubleX_y_pos[] = {1,8,2,7,3,6,4,5,4,5,3,6,2,7,1,8};
+	uint8_t doubleXoutputArray[9] = {0};
+	positionToMatrixPos(doubleX_x_pos, doubleX_y_pos, doubleXSize, doubleXoutputArray);
+
+	LEDMatrixWrite(doubleXoutputArray);
+	Delay(500);
+	matrixClear();
+	Delay(500);
+	LEDMatrixWrite(doubleXoutputArray);
+	Delay(500);
+	matrixClear();
+	Delay(500);
+
+	// R? (Restart question)
+	int RSize = 23;
+	uint8_t R_x_pos[] = {1,1,1,1,1,1,2,2,3,3,3,4,4,4,6,6,7,7,7,8,8,8,8};
+	uint8_t R_y_pos[] = {1,2,3,4,5,6,4,6,3,4,6,1,2,5,5,6,1,3,6,3,4,5,6};
+	uint8_t RoutputArray[9] = {0};
+	positionToMatrixPos(R_x_pos, R_y_pos, RSize, RoutputArray);
+
+	while(1)
+	{
+		for (volatile int i = 1; i <= 8; i++)
+		{
+			for (volatile int j = 1; j <= i; j++)
+			{
+				LEDMatrixRowWrite(RoutputArray, j);
+			}
+			Delay(500);
+		}
+		matrixClear();
+		Delay(500);
+		LEDMatrixWrite(RoutputArray);
+		Delay(500);
+		matrixClear();
+		Delay(500);
+		LEDMatrixWrite(RoutputArray);
+		Delay(4000);
+	}
+}
+
+void SnakeDead(void)
+{
+	alive = false;
+}
+
+void SnakeCheckAfterMove(snake_Type *snake)
+{
+	// Check if out of bounds
+	uint8_t snake_head_x = snake->x_pos[0];
+	uint8_t snake_head_y = snake->y_pos[0];
+	if (snake_head_x < 1 || snake_head_x > 8)
+	{
+		SnakeDead();
+	}
+	if (snake_head_y < 1 || snake_head_y > 8)
+	{
+		SnakeDead();
+	}
+	// Check if head hits body
+	for (int i = 1; i < snake->snakeSize; i++)
+	{
+		if (snake_head_x == snake->x_pos[i])
+		{
+			if (snake_head_y == snake->y_pos[i])
+			{
+				SnakeDead();
+			}
+		}
+	}
 }
