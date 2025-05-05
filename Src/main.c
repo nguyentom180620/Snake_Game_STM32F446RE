@@ -82,6 +82,7 @@ void EXTI3_IRQHandler(void);
 void playLoseScreen(void);
 
 static volatile int snake_direction = RIGHT;
+static volatile int previous_direction = RIGHT;
 static volatile bool alive = true;
 
 typedef struct {
@@ -102,6 +103,13 @@ static void SnakeInit(snake_Type *snake);
 static void MoveSnake(snake_Type *snake);
 static void SnakeDead(void);
 static void SnakeCheckAfterMove(snake_Type *snake);
+
+typedef struct {
+	uint8_t x_pos[1];
+	uint8_t y_pos[1];
+} apple_Type;
+
+static void AppleInit(apple_Type *apple);
 
 int main(void)
 {
@@ -126,10 +134,15 @@ int main(void)
 	matrixInit();
 
 	// Write data here
-	// Snake Starts with head at (3, 2), tail at (2, 2), and size 2
+	// Snake starts with head at (3, 2), tail at (1, 2), and size 3
 	snake_Type snake;
 	snake_Type *snake_Ptr = &snake;
 	SnakeInit(snake_Ptr);
+
+	// Apple starts at (3, 7) and will update to a random square after collected
+	apple_Type apple;
+	apple_Type *apple_Ptr = &apple;
+	AppleInit(apple_Ptr);
 
 	while(1)
 	{
@@ -144,9 +157,6 @@ int main(void)
 
 		// Next, delay by set amount (default 1 second)
 		Delay(1000);
-
-		// Here, we would check if apple was collected.
-		// If it was, add one to size and reset apple collected
 
 		// Then, move the snake by one
 		MoveSnake(snake_Ptr);
@@ -514,7 +524,10 @@ void EXTI0_IRQHandler(void)
 {
 	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
 
-	snake_direction = UP;
+	if (previous_direction != DOWN)
+	{
+		snake_direction = UP;
+	}
 
 	// Clear PinC0 interrupt Bit
 	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
@@ -524,30 +537,39 @@ void EXTI1_IRQHandler(void)
 {
 	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
 
-	snake_direction = RIGHT;
+	if (previous_direction != LEFT)
+	{
+		snake_direction = RIGHT;
+	}
 
 	// Clear PinC1 interrupt Bit
-	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 1;
 }
 
 void EXTI2_IRQHandler(void)
 {
 	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
 
-	snake_direction = DOWN;
+	if (previous_direction != UP)
+	{
+		snake_direction = DOWN;
+	}
 
 	// Clear PinC2 interrupt Bit
-	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 2;
 }
 
 void EXTI3_IRQHandler(void)
 {
 	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
 
-	snake_direction = LEFT;
+	if (previous_direction != RIGHT)
+	{
+		snake_direction = LEFT;
+	}
 
 	// Clear PinC3 interrupt Bit
-	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 3;
 }
 
 void DisplaySnake(snake_Type snake)
@@ -558,7 +580,7 @@ void DisplaySnake(snake_Type snake)
 
 void SnakeInit(snake_Type *snake)
 {
-	snake->snakeSize = 2;
+	snake->snakeSize = 3;
 	for (int i = 0; i < 64; i++)
 	{
 		snake->x_pos[i] = 0;
@@ -568,6 +590,8 @@ void SnakeInit(snake_Type *snake)
 	snake->x_pos[1] = 2;
 	snake->y_pos[0] = 2;
 	snake->y_pos[1] = 2;
+	snake->x_pos[2] = 1;
+	snake->y_pos[2] = 2;
 	for (int i = 0; i < 9; i++)
 	{
 		snake->outputArray[i] = 0;
@@ -594,6 +618,9 @@ void MoveSnake(snake_Type *snake)
 		case LEFT:
 			tempToPlacex -= 1;
 	}
+	// Here, we would check if apple was collected.
+	// If it was, add one to size and reset apple collected
+
 	for (int i = 0; i < snake->snakeSize; i++)
 	{
 		tempToStorex = snake->x_pos[i];
@@ -603,6 +630,7 @@ void MoveSnake(snake_Type *snake)
 		tempToPlacex = tempToStorex;
 		tempToPlacey = tempToStorey;
 	}
+	previous_direction = snake_direction;
 }
 
 void playLoseScreen(void)
@@ -648,6 +676,8 @@ void playLoseScreen(void)
 		Delay(500);
 		LEDMatrixWrite(RoutputArray);
 		Delay(4000);
+		matrixClear();
+		Delay(500);
 	}
 }
 
@@ -680,4 +710,10 @@ void SnakeCheckAfterMove(snake_Type *snake)
 			}
 		}
 	}
+}
+
+void AppleInit(apple_Type *apple)
+{
+	apple->x_pos[0] = 3;
+	apple->y_pos[0] = 7;
 }
