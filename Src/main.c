@@ -15,13 +15,13 @@
 #define RCC_APB2ENR		(RCC + 0x44)
 #define FLASH			0x40023C00
 #define FLASH_ACR		(FLASH + 0x00)
-#define TIM3		0x40000400
-#define TIM3_CR1	(TIM3 + 0x00)
-#define TIM3_DIER	(TIM3 + 0x0C)
-#define TIM3_SR		(TIM3 + 0x10)
-#define TIM3_CNT	(TIM3 + 0x24)
-#define TIM3_PSC	(TIM3 + 0x28)
-#define TIM3_ARR	(TIM3 + 0x2C)
+#define TIM3			0x40000400
+#define TIM3_CR1		(TIM3 + 0x00)
+#define TIM3_DIER		(TIM3 + 0x0C)
+#define TIM3_SR			(TIM3 + 0x10)
+#define TIM3_CNT		(TIM3 + 0x24)
+#define TIM3_PSC		(TIM3 + 0x28)
+#define TIM3_ARR		(TIM3 + 0x2C)
 #define SPI1			0x40013000
 #define SPI1_CR1		(SPI1 + 0x00)
 #define SPI1_CR2		(SPI1 + 0x04)
@@ -40,6 +40,12 @@
 #define EXTI			0x40013C00
 #define EXTI_IMR		(EXTI + 0x00)
 #define EXTI_FTSR		(EXTI + 0x0C)
+#define EXTI_PR			(EXTI + 0x14)
+#define NVIC_ISER		0xE000E100
+#define UP				0
+#define RIGHT			1
+#define DOWN			2
+#define LEFT			3
 
 static void SetSystemClockto16MHz(void);
 static void ConfigureTimer3(void);
@@ -63,6 +69,19 @@ static void LEDMatrixWrite(uint8_t outputArray[]);
 static void LEDMatrixRowWrite(uint8_t outputArray[], uint8_t row);
 static void LEDMatrixColumnWrite(uint8_t outputArray[], uint8_t col);
 static void MovementButtonsInit(void);
+void NVIC_EnableIRQ(uint32_t IRQn);
+void EXTI0_IRQHandler(void);
+void EXTI1_IRQHandler(void);
+void EXTI2_IRQHandler(void);
+void EXTI3_IRQHandler(void);
+
+static volatile int snake_direction = RIGHT;
+
+typedef struct {
+	volatile uint32_t ISER[3];
+} NVIC_Type;
+
+#define NVIC ((NVIC_Type*)NVIC_ISER)
 
 int main(void)
 {
@@ -454,5 +473,25 @@ void MovementButtonsInit(void)
 	{
 		*EXTI_IMR_Ptr |= (uint32_t)0b1 << i;
 	}
+}
 
+void NVIC_EnableIRQ(uint32_t IRQn)
+{
+	if (IRQn <= 96)
+	{
+		uint32_t iserIndex = IRQn >> 5;
+		uint32_t iserBit = IRQn & 0x1F;
+
+		NVIC->ISER[iserIndex] |= (0x1 << iserBit);
+	}
+}
+
+void EXTI0_IRQHandler(void)
+{
+	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
+
+
+
+	// Clear PinC0 interrupt Bit
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 0;
 }
