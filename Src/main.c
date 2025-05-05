@@ -98,11 +98,12 @@ typedef struct {
 	uint8_t outputArray[9];
 } snake_Type;
 
-static void DisplaySnake(snake_Type snake);
+static void DisplaySnake(snake_Type *snake);
 static void SnakeInit(snake_Type *snake);
 static void MoveSnake(snake_Type *snake);
 static void SnakeDead(void);
 static void SnakeCheckAfterMove(snake_Type *snake);
+static void ClearOutputArray(snake_Type *snake);
 
 typedef struct {
 	uint8_t x_pos[1];
@@ -110,6 +111,9 @@ typedef struct {
 } apple_Type;
 
 static void AppleInit(apple_Type *apple);
+static void DisplayApple(snake_Type *snake, apple_Type *apple);
+
+static void DisplayGame(snake_Type *snake, apple_Type *apple);
 
 int main(void)
 {
@@ -153,7 +157,7 @@ int main(void)
 		}
 
 		// First, display to screen
-		DisplaySnake(snake);
+		DisplayGame(snake_Ptr, apple_Ptr);
 
 		// Next, delay by set amount (default 1 second)
 		Delay(1000);
@@ -572,10 +576,9 @@ void EXTI3_IRQHandler(void)
 	*EXTI_PR_Ptr = (uint32_t)0b1 << 3;
 }
 
-void DisplaySnake(snake_Type snake)
+void DisplaySnake(snake_Type *snake)
 {
-	positionToMatrixPos(snake.x_pos, snake.y_pos, snake.snakeSize, snake.outputArray);
-	LEDMatrixWrite(snake.outputArray);
+	positionToMatrixPos(snake->x_pos, snake->y_pos, snake->snakeSize, snake->outputArray);
 }
 
 void SnakeInit(snake_Type *snake)
@@ -712,8 +715,29 @@ void SnakeCheckAfterMove(snake_Type *snake)
 	}
 }
 
+void ClearOutputArray(snake_Type *snake)
+{
+	for (int i = 0; i < 9; i++)
+	{
+		snake->outputArray[i] = 0;
+	}
+}
+
 void AppleInit(apple_Type *apple)
 {
 	apple->x_pos[0] = 3;
 	apple->y_pos[0] = 7;
+}
+
+void DisplayApple(snake_Type *snake, apple_Type *apple)
+{
+	positionToMatrixPos(apple->x_pos, apple->y_pos, 1, snake->outputArray);
+}
+
+void DisplayGame(snake_Type *snake, apple_Type *apple)
+{
+	DisplaySnake(snake);
+	DisplayApple(snake, apple);
+	LEDMatrixWrite(snake->outputArray);
+	ClearOutputArray(snake);
 }
