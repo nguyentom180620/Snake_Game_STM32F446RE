@@ -35,6 +35,11 @@
 #define CS_BSRR			(CS_Port + 0x18)
 #define GPIOC			0x40020800
 #define GPIOC_MODER		(GPIOC + 0x00)
+#define SYSCFG			0x40013800
+#define SYSCFG_EXTICR1	(SYSCFG + 0x08)
+#define EXTI			0x40013C00
+#define EXTI_IMR		(EXTI + 0x00)
+#define EXTI_FTSR		(EXTI + 0x0C)
 
 static void SetSystemClockto16MHz(void);
 static void ConfigureTimer3(void);
@@ -57,6 +62,7 @@ static void positionToMatrixPos(uint8_t x_pos[], uint8_t y_pos[], int numberOfCo
 static void LEDMatrixWrite(uint8_t outputArray[]);
 static void LEDMatrixRowWrite(uint8_t outputArray[], uint8_t row);
 static void LEDMatrixColumnWrite(uint8_t outputArray[], uint8_t col);
+static void MovementButtonsInit(void);
 
 int main(void)
 {
@@ -65,20 +71,9 @@ int main(void)
 	SPI1ClockEnable();
 	GPIOAClockEnable();
 
-	// Now, set up button GPIOC clock and pins
+	// Now, set up user buttons
 	GPIOCClockEnable();
-	uint32_t *GPIOC_MODER_Ptr = (uint32_t*)GPIOC_MODER;
-	// Up Pin PC0
-	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (0 * 2));
-	// Right Pin PC1
-	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (1 * 2));
-	// Down Pin PC2
-	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (2 * 2));
-	// Left Pin PC3
-	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (3 * 2));
-
-	// Now set up falling edge interrupt for buttons
-
+	MovementButtonsInit();
 
 	SPI1PinsInit();
 	SPI1Init();
@@ -419,4 +414,45 @@ void LEDMatrixColumnWrite(uint8_t outputArray[], uint8_t col)
 		uint16_t writeRow = (i << 8) | row_val;
 		SPI1_Transmit(writeRow);
 	}
+}
+
+void MovementButtonsInit(void)
+{
+	// Sets buttons as inputs
+	uint32_t *GPIOC_MODER_Ptr = (uint32_t*)GPIOC_MODER;
+	// Up Pin PC0
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (0 * 2));
+	// Right Pin PC1
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (1 * 2));
+	// Down Pin PC2
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (2 * 2));
+	// Left Pin PC3
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (3 * 2));
+
+	// Now set up falling edge interrupt for buttons
+	// Enable SYSCFG Clock
+	uint32_t *RCC_APB2ENR_Ptr = (uint32_t*)RCC_APB2ENR;
+	*RCC_APB2ENR_Ptr |= (uint32_t)0b1 << 14;
+
+	// Configure EXTI0 to EXTI3 for PC0-PC3
+	uint32_t *SYSCFG_EXTICR1_Ptr = (uint32_t*)SYSCFG_EXTICR1;
+	for (int i = 0; i < 4; i++)
+	{
+		*SYSCFG_EXTICR1_Ptr |= (uint32_t)0b0010 << (i * 4);
+	}
+
+	// Enable falling trigger
+	uint32_t *EXTI_FTSR_Ptr = (uint32_t*)EXTI_FTSR;
+	for (int i = 0; i < 4; i++)
+	{
+		*EXTI_FTSR_Ptr |= (uint32_t)0b1 << i;
+	}
+
+	// Unmask the interrupt
+	uint32_t *EXTI_IMR_Ptr = (uint32_t*)EXTI_IMR;
+	for (int i = 0; i < 4; i++)
+	{
+		*EXTI_IMR_Ptr |= (uint32_t)0b1 << i;
+	}
+
 }
