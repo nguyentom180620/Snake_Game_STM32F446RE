@@ -5,7 +5,9 @@
  * Date: 5/4/2025
  */
 
+#include <time.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdbool.h>
 
 #define RCC 			0x40023800
@@ -100,10 +102,10 @@ typedef struct {
 
 static void DisplaySnake(snake_Type *snake);
 static void SnakeInit(snake_Type *snake);
-static void MoveSnake(snake_Type *snake);
 static void SnakeDead(void);
 static void SnakeCheckAfterMove(snake_Type *snake);
 static void ClearOutputArray(snake_Type *snake);
+static void SnakeGrow(snake_Type *snake);
 
 typedef struct {
 	uint8_t x_pos[1];
@@ -112,11 +114,16 @@ typedef struct {
 
 static void AppleInit(apple_Type *apple);
 static void DisplayApple(snake_Type *snake, apple_Type *apple);
+static bool CheckIfAppleCollected(uint8_t snakeHeadx, uint8_t snakeHeady, apple_Type *apple);
+static void ReplaceApple(snake_Type *snake, apple_Type *apple);
 
 static void DisplayGame(snake_Type *snake, apple_Type *apple);
+static void MoveSnake(snake_Type *snake, apple_Type *apple);
 
 int main(void)
 {
+	srand(time(NULL));
+
 	SetSystemClockto16MHz();
 	ConfigureTimer3();
 	SPI1ClockEnable();
@@ -163,7 +170,7 @@ int main(void)
 		Delay(1000);
 
 		// Then, move the snake by one
-		MoveSnake(snake_Ptr);
+		MoveSnake(snake_Ptr, apple_Ptr);
 
 		// Finally, check if head is currently at an apple (then set that bool)
 		// and lastly check if we are alive (Are we out of bounds or have we hit ourself)
@@ -601,41 +608,6 @@ void SnakeInit(snake_Type *snake)
 	}
 }
 
-void MoveSnake(snake_Type *snake)
-{
-	uint8_t tempToPlacex = snake->x_pos[0];
-	uint8_t tempToPlacey = snake->y_pos[0];
-	uint8_t tempToStorex = 0;
-	uint8_t tempToStorey = 0;
-	switch(snake_direction)
-	{
-		case UP:
-			tempToPlacey += 1;
-			break;
-		case RIGHT:
-			tempToPlacex += 1;
-			break;
-		case DOWN:
-			tempToPlacey -= 1;
-			break;
-		case LEFT:
-			tempToPlacex -= 1;
-	}
-	// Here, we would check if apple was collected.
-	// If it was, add one to size and reset apple collected
-
-	for (int i = 0; i < snake->snakeSize; i++)
-	{
-		tempToStorex = snake->x_pos[i];
-		tempToStorey = snake->y_pos[i];
-		snake->x_pos[i] = tempToPlacex;
-		snake->y_pos[i] = tempToPlacey;
-		tempToPlacex = tempToStorex;
-		tempToPlacey = tempToStorey;
-	}
-	previous_direction = snake_direction;
-}
-
 void playLoseScreen(void)
 {
 	// Double X
@@ -723,6 +695,11 @@ void ClearOutputArray(snake_Type *snake)
 	}
 }
 
+void SnakeGrow(snake_Type *snake)
+{
+	snake->snakeSize += 1;
+}
+
 void AppleInit(apple_Type *apple)
 {
 	apple->x_pos[0] = 3;
@@ -734,10 +711,130 @@ void DisplayApple(snake_Type *snake, apple_Type *apple)
 	positionToMatrixPos(apple->x_pos, apple->y_pos, 1, snake->outputArray);
 }
 
+bool CheckIfAppleCollected(uint8_t snakeHeadx, uint8_t snakeHeady, apple_Type *apple)
+{
+	if (snakeHeadx == apple->x_pos[0])
+	{
+		if (snakeHeady == apple->y_pos[0])
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ReplaceApple(snake_Type *snake, apple_Type *apple)
+{
+	// Generating new random apple position
+
+	// Check through snake x positions
+	uint8_t check_x[10] = {0};
+	uint8_t check_x_size = 0;
+	for (int i = 0; i < snake->snakeSize; i++)
+	{
+		check_x[snake->x_pos[i]] = 1;
+	}
+	// Generate new list with elements not in snake x positions
+	for (int i = 0; i < 10; i++)
+	{
+		if (check_x[i] == 0)
+		{
+			check_x_size += 1;
+		}
+	}
+	uint8_t newPossibleX[check_x_size];
+	uint8_t newPossibleXPtr = 0;
+	for (int i = 0; i < 10; i++)
+	{
+		if (check_x[i] == 0)
+		{
+			newPossibleX[newPossibleXPtr] = i;
+			newPossibleXPtr += 1;
+		}
+	}
+	// Now pick a number from random and update apple x, then same for Y
+	uint8_t randomX = rand() % check_x_size;
+	apple->x_pos[0] = newPossibleX[randomX];
+
+
+	// Check through snake y positions
+	uint8_t check_y[10] = {0};
+	uint8_t check_y_size = 0;
+	for (int i = 0; i < snake->snakeSize; i++)
+	{
+		check_y[snake->y_pos[i]] = 1;
+	}
+	// Generate new list with elements not in snake y positions
+	for (int i = 0; i < 10; i++)
+	{
+		if (check_y[i] == 0)
+		{
+			check_y_size += 1;
+		}
+	}
+	uint8_t newPossibleY[check_y_size];
+	uint8_t newPossibleYPtr = 0;
+	for (int i = 0; i < 10; i++)
+	{
+		if (check_y[i] == 0)
+		{
+			newPossibleY[newPossibleYPtr] = i;
+			newPossibleYPtr += 1;
+		}
+	}
+	// Now pick a number from random and update apple x, then same for Y
+	uint8_t randomY = rand() % check_y_size;
+	apple->y_pos[0] = newPossibleY[randomY];
+}
+
 void DisplayGame(snake_Type *snake, apple_Type *apple)
 {
 	DisplaySnake(snake);
 	DisplayApple(snake, apple);
 	LEDMatrixWrite(snake->outputArray);
 	ClearOutputArray(snake);
+}
+
+void MoveSnake(snake_Type *snake, apple_Type *apple)
+{
+	uint8_t tempToPlacex = snake->x_pos[0];
+	uint8_t tempToPlacey = snake->y_pos[0];
+	uint8_t tempToStorex = 0;
+	uint8_t tempToStorey = 0;
+	switch(snake_direction)
+	{
+		case UP:
+			tempToPlacey += 1;
+			break;
+		case RIGHT:
+			tempToPlacex += 1;
+			break;
+		case DOWN:
+			tempToPlacey -= 1;
+			break;
+		case LEFT:
+			tempToPlacex -= 1;
+	}
+
+	bool apple_collected = CheckIfAppleCollected(tempToPlacex, tempToPlacey, apple);
+	if (apple_collected)
+	{
+		SnakeGrow(snake);
+	}
+
+	for (int i = 0; i < snake->snakeSize; i++)
+	{
+		tempToStorex = snake->x_pos[i];
+		tempToStorey = snake->y_pos[i];
+		snake->x_pos[i] = tempToPlacex;
+		snake->y_pos[i] = tempToPlacey;
+		tempToPlacex = tempToStorex;
+		tempToPlacey = tempToStorey;
+	}
+	previous_direction = snake_direction;
+
+	if (apple_collected)
+	{
+		ReplaceApple(snake, apple);
+	}
 }
