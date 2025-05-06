@@ -1,3 +1,6 @@
+// NOTE: FIX RANDOM APPLE PLACEMENT, IT FAILS CASE WHERE ALL NUMBERS ARE IN SET
+// maybe figure out how to actually map a matrix for avaliable spots
+
 /*
  * Name: Bare_Metal_Snake_Game
  * Purpose: To develop a game using the STM32F446RE and the MAX7219 w/ LED matrix display
@@ -167,7 +170,7 @@ int main(void)
 		DisplayGame(snake_Ptr, apple_Ptr);
 
 		// Next, delay by set amount (default 1 second)
-		Delay(1000);
+		Delay(250);
 
 		// Then, move the snake by one
 		MoveSnake(snake_Ptr, apple_Ptr);
@@ -176,6 +179,8 @@ int main(void)
 		// and lastly check if we are alive (Are we out of bounds or have we hit ourself)
 		SnakeCheckAfterMove(snake_Ptr);
 	}
+
+	return EXIT_SUCCESS;
 }
 
 void SetSystemClockto16MHz(void)
@@ -725,66 +730,45 @@ bool CheckIfAppleCollected(uint8_t snakeHeadx, uint8_t snakeHeady, apple_Type *a
 
 void ReplaceApple(snake_Type *snake, apple_Type *apple)
 {
-	// Generating new random apple position
+	uint8_t newCords[8][8] = {0};
 
-	// Check through snake x positions
-	uint8_t check_x[10] = {0};
-	uint8_t check_x_size = 0;
 	for (int i = 0; i < snake->snakeSize; i++)
 	{
-		check_x[snake->x_pos[i]] = 1;
+		newCords[snake->y_pos[i] - 1][snake->x_pos[i] - 1] = 1;
 	}
-	// Generate new list with elements not in snake x positions
-	for (int i = 0; i < 10; i++)
-	{
-		if (check_x[i] == 0)
-		{
-			check_x_size += 1;
-		}
-	}
-	uint8_t newPossibleX[check_x_size];
-	uint8_t newPossibleXPtr = 0;
-	for (int i = 0; i < 10; i++)
-	{
-		if (check_x[i] == 0)
-		{
-			newPossibleX[newPossibleXPtr] = i;
-			newPossibleXPtr += 1;
-		}
-	}
-	// Now pick a number from random and update apple x, then same for Y
-	uint8_t randomX = rand() % check_x_size;
-	apple->x_pos[0] = newPossibleX[randomX];
 
+	uint8_t newSize = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		for (int j = 0; j < 8; j++)
+		{
+			if (newCords[i][j] == 0)
+			{
+				newSize++;
+			}
+		}
+	}
+	uint8_t newPossiblePos[newSize];
+	uint8_t newPossiblePosPtr = 0;
+	uint8_t counter = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		for (int j = 0; j < 8; j++)
+		{
+			if (newCords[i][j] == 0)
+			{
+				newPossiblePos[newPossiblePosPtr] = counter;
+				newPossiblePosPtr++;
+			}
+			counter++;
+		}
+	}
 
-	// Check through snake y positions
-	uint8_t check_y[10] = {0};
-	uint8_t check_y_size = 0;
-	for (int i = 0; i < snake->snakeSize; i++)
-	{
-		check_y[snake->y_pos[i]] = 1;
-	}
-	// Generate new list with elements not in snake y positions
-	for (int i = 0; i < 10; i++)
-	{
-		if (check_y[i] == 0)
-		{
-			check_y_size += 1;
-		}
-	}
-	uint8_t newPossibleY[check_y_size];
-	uint8_t newPossibleYPtr = 0;
-	for (int i = 0; i < 10; i++)
-	{
-		if (check_y[i] == 0)
-		{
-			newPossibleY[newPossibleYPtr] = i;
-			newPossibleYPtr += 1;
-		}
-	}
-	// Now pick a number from random and update apple x, then same for Y
-	uint8_t randomY = rand() % check_y_size;
-	apple->y_pos[0] = newPossibleY[randomY];
+	uint8_t randomPosIndex = rand() % newSize;
+	uint8_t randomPos = newPossiblePos[randomPosIndex];
+
+	apple->y_pos[0] = randomPos / 8 + 1;
+	apple->x_pos[0] = randomPos % 8 + 1;
 }
 
 void DisplayGame(snake_Type *snake, apple_Type *apple)
