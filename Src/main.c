@@ -58,6 +58,7 @@
 
 static void SetSystemClockto16MHz(void);
 static void ConfigureTimer3(void);
+static void RandomSeedLoader(void);
 static void Delay(uint32_t ms);
 static void SPI1ClockEnable(void);
 static void GPIOAClockEnable(void);
@@ -128,14 +129,12 @@ static void MoveSnake(snake_Type *snake, apple_Type *apple);
 
 int main(void)
 {
-	srand(time(NULL));
-
 	SetSystemClockto16MHz();
 	ConfigureTimer3();
 	SPI1ClockEnable();
 	GPIOAClockEnable();
-
 	GPIOCClockEnable();
+
 	ResetButtonInit();
 	MovementButtonsInit();
 
@@ -149,6 +148,7 @@ int main(void)
 	SPI1Init();
 
 	matrixInit();
+	RandomSeedLoader();
 
 	// Write data here
 	// Snake starts with head at (3, 2), tail at (1, 2), and size 3
@@ -253,6 +253,14 @@ void ConfigureTimer3(void)
 	// Enable TIM3
 	uint32_t *TIM3_CR1_Ptr = (uint32_t*)TIM3_CR1;
 	*TIM3_CR1_Ptr = (uint32_t)0b1 << 0;
+}
+
+void RandomSeedLoader(void)
+{
+	// For random seeding upon reset
+	volatile uint32_t *TIM3_CNT_Ptr = (volatile uint32_t*)TIM3_CNT;
+	uint32_t timer3Val = *TIM3_CNT_Ptr;
+	srand((uint32_t)time(NULL) ^ (uint32_t)timer3Val);
 }
 
 void Delay(uint32_t ms)
@@ -844,6 +852,8 @@ void ResetGame(snake_Type *snake, apple_Type *apple)
 	previous_direction = RIGHT;
 	alive = true;
 	reset = false;
+
+	RandomSeedLoader();
 }
 
 void MoveSnake(snake_Type *snake, apple_Type *apple)
