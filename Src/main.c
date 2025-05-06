@@ -1,6 +1,3 @@
-// NOTE: FIX RANDOM APPLE PLACEMENT, IT FAILS CASE WHERE ALL NUMBERS ARE IN SET
-// maybe figure out how to actually map a matrix for avaliable spots
-
 /*
  * Name: Bare_Metal_Snake_Game
  * Purpose: To develop a game using the STM32F446RE and the MAX7219 w/ LED matrix display
@@ -43,6 +40,7 @@
 #define GPIOC_MODER		(GPIOC + 0x00)
 #define SYSCFG			0x40013800
 #define SYSCFG_EXTICR1	(SYSCFG + 0x08)
+#define SYSCFG_EXTICR4	(SYSCFG + 0x14)
 #define EXTI			0x40013C00
 #define EXTI_IMR		(EXTI + 0x00)
 #define EXTI_FTSR		(EXTI + 0x0C)
@@ -51,6 +49,7 @@
 #define EXTI1IRQn		7
 #define EXTI2IRQn		8
 #define EXTI3IRQn		9
+#define EXTI15_10IRQn	40
 #define NVIC_ISER		0xE000E100
 #define UP				0
 #define RIGHT			1
@@ -78,17 +77,20 @@ static void positionToMatrixPos(uint8_t x_pos[], uint8_t y_pos[], int numberOfCo
 static void LEDMatrixWrite(uint8_t outputArray[]);
 static void LEDMatrixRowWrite(uint8_t outputArray[], uint8_t row);
 static void LEDMatrixColumnWrite(uint8_t outputArray[], uint8_t col);
+static void ResetButtonInit(void);
 static void MovementButtonsInit(void);
 void NVIC_EnableIRQ(uint32_t IRQn);
 void EXTI0_IRQHandler(void);
 void EXTI1_IRQHandler(void);
 void EXTI2_IRQHandler(void);
 void EXTI3_IRQHandler(void);
+void EXTI15_10_IRQHandler(void);
 void playLoseScreen(void);
 
 static volatile int snake_direction = RIGHT;
 static volatile int previous_direction = RIGHT;
 static volatile bool alive = true;
+static volatile bool reset = false;
 
 typedef struct {
 	volatile uint32_t ISER[3];
@@ -121,6 +123,7 @@ static bool CheckIfAppleCollected(uint8_t snakeHeadx, uint8_t snakeHeady, apple_
 static void ReplaceApple(snake_Type *snake, apple_Type *apple);
 
 static void DisplayGame(snake_Type *snake, apple_Type *apple);
+static void ResetGame(snake_Type *snake, apple_Type *apple);
 static void MoveSnake(snake_Type *snake, apple_Type *apple);
 
 int main(void)
@@ -132,15 +135,15 @@ int main(void)
 	SPI1ClockEnable();
 	GPIOAClockEnable();
 
-	// Now, set up user buttons
 	GPIOCClockEnable();
+	ResetButtonInit();
 	MovementButtonsInit();
 
-	// Enable Interrupts
 	NVIC_EnableIRQ(EXTI0IRQn);
 	NVIC_EnableIRQ(EXTI1IRQn);
 	NVIC_EnableIRQ(EXTI2IRQn);
 	NVIC_EnableIRQ(EXTI3IRQn);
+	NVIC_EnableIRQ(EXTI15_10IRQn);
 
 	SPI1PinsInit();
 	SPI1Init();
@@ -160,6 +163,11 @@ int main(void)
 
 	while(1)
 	{
+		// If reset, restart snake and apple values
+		if (reset == true)
+		{
+			ResetGame(snake_Ptr, apple_Ptr);
+		}
 		// If dead, play the dead sequence and queue for restart
 		if (alive == false)
 		{
@@ -254,6 +262,9 @@ void Delay(uint32_t ms)
 	uint32_t *TIM3_SR_Ptr = (uint32_t*)TIM3_SR;
 	for (i = 0; i <= ms; i++)
 	{
+		// Check if reset is true (this is where most polling happens)
+		if (reset) return;
+
 		// Clear TIM3 Count
 		*TIM3_CNT_Ptr = 0;
 
@@ -485,6 +496,31 @@ void LEDMatrixColumnWrite(uint8_t outputArray[], uint8_t col)
 	}
 }
 
+void ResetButtonInit(void)
+{
+	// Sets button as inputs
+	uint32_t *GPIOC_MODER_Ptr = (uint32_t*)GPIOC_MODER;
+	// Reset Button PC13 (User button)
+	*GPIOC_MODER_Ptr &= ~((uint32_t)0b11 << (13 * 2));
+
+	// Falling Edge interrupt
+	// SYSCLK Enabled
+	uint32_t *RCC_APB2ENR_Ptr = (uint32_t*)RCC_APB2ENR;
+	*RCC_APB2ENR_Ptr |= (uint32_t)0b1 << 14;
+
+	// Configure EXTI13 for PC13
+	uint32_t *SYSCFG_EXTICR4_Ptr = (uint32_t*)SYSCFG_EXTICR4;
+	*SYSCFG_EXTICR4_Ptr |= (uint32_t)0b0010 << 4;
+
+	// Enable falling trigger mode
+	uint32_t *EXTI_FTSR_Ptr = (uint32_t*)EXTI_FTSR;
+	*EXTI_FTSR_Ptr |= (uint32_t)0b1 << 13;
+
+	// Unmask interrupt
+	uint32_t *EXTI_IMR_Ptr = (uint32_t*)EXTI_IMR;
+	*EXTI_IMR_Ptr |= (uint32_t)0b1 << 13;
+}
+
 void MovementButtonsInit(void)
 {
 	// Sets buttons as inputs
@@ -588,6 +624,16 @@ void EXTI3_IRQHandler(void)
 	*EXTI_PR_Ptr = (uint32_t)0b1 << 3;
 }
 
+void EXTI15_10_IRQHandler(void)
+{
+	uint32_t *EXTI_PR_Ptr = (uint32_t*)EXTI_PR;
+
+	reset = true;
+
+	// Clear PinC13 interrupt Bit
+	*EXTI_PR_Ptr = (uint32_t)0b1 << 13;
+}
+
 void DisplaySnake(snake_Type *snake)
 {
 	positionToMatrixPos(snake->x_pos, snake->y_pos, snake->snakeSize, snake->outputArray);
@@ -623,13 +669,18 @@ void playLoseScreen(void)
 	positionToMatrixPos(doubleX_x_pos, doubleX_y_pos, doubleXSize, doubleXoutputArray);
 
 	LEDMatrixWrite(doubleXoutputArray);
+	if (reset) return;
 	Delay(500);
 	matrixClear();
+	if (reset) return;
 	Delay(500);
 	LEDMatrixWrite(doubleXoutputArray);
+	if (reset) return;
 	Delay(500);
 	matrixClear();
+	if (reset) return;
 	Delay(500);
+	if (reset) return;
 
 	// R? (Restart question)
 	int RSize = 23;
@@ -645,18 +696,24 @@ void playLoseScreen(void)
 			for (volatile int j = 1; j <= i; j++)
 			{
 				LEDMatrixRowWrite(RoutputArray, j);
+				if (reset) return;
 			}
 			Delay(500);
 		}
 		matrixClear();
+		if (reset) return;
 		Delay(500);
 		LEDMatrixWrite(RoutputArray);
+		if (reset) return;
 		Delay(500);
 		matrixClear();
+		if (reset) return;
 		Delay(500);
 		LEDMatrixWrite(RoutputArray);
+		if (reset) return;
 		Delay(4000);
 		matrixClear();
+		if (reset) return;
 		Delay(500);
 	}
 }
@@ -777,6 +834,16 @@ void DisplayGame(snake_Type *snake, apple_Type *apple)
 	DisplayApple(snake, apple);
 	LEDMatrixWrite(snake->outputArray);
 	ClearOutputArray(snake);
+}
+
+void ResetGame(snake_Type *snake, apple_Type *apple)
+{
+	SnakeInit(snake);
+	AppleInit(apple);
+	snake_direction = RIGHT;
+	previous_direction = RIGHT;
+	alive = true;
+	reset = false;
 }
 
 void MoveSnake(snake_Type *snake, apple_Type *apple)
